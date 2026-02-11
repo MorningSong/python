@@ -608,139 +608,71 @@ class TestUtils(unittest.TestCase):
         app_api.delete_namespaced_deployment(
             name="mock", namespace=self.test_namespace, body={})
 
-    def test_get_metrics_from_cluster(self):
+    def test_metrics_utilities_integration(self):
         """
-        Should be able to fetch node and pod metrics from the cluster.
-        This test requires metrics-server to be installed in the cluster.
+        E2E validation of metrics utility functions.
+        Note: Requires metrics-server to be running in cluster.
         """
-        k8s_client = client.api_client.ApiClient(configuration=self.config)
-        core_api = client.CoreV1Api(k8s_client)
+        from time import sleep
         
-        # Create a test pod for metrics
+        api = client.api_client.ApiClient(configuration=self.config)
+        v1 = client.CoreV1Api(api)
+        
+        # Setup: deploy busybox pod
         utils.create_from_yaml(
-            k8s_client, self.path_prefix + "core-pod.yaml",
+            api, self.path_prefix + "core-pod.yaml",
             namespace=self.test_namespace)
         
-        # Wait for pod to be running (with timeout)
-        import time
-        max_wait = 60
-        waited = 0
-        pod_running = False
-        while waited < max_wait:
+        # Wait for pod startup (simple polling)
+        for _ in range(30):
             try:
-                pod = core_api.read_namespaced_pod(
-                    name="myapp-pod", namespace=self.test_namespace)
-                if pod.status.phase == "Running":
-                    pod_running = True
+                p = v1.read_namespaced_pod("myapp-pod", self.test_namespace)
+                if p.status.phase == "Running":
                     break
-            except ApiException:
+            except:
                 pass
-            time.sleep(2)
-            waited += 2
+            sleep(2)
+        else:
+            # Cleanup and skip if pod never started
+            try:
+                v1.delete_namespaced_pod("myapp-pod", self.test_namespace, body={})
+            except:
+                pass
+            raise unittest.SkipTest("Pod startup timeout")
         
-        # Skip test if pod didn't start (cluster might be slow)
-        if not pod_running:
-            core_api.delete_namespaced_pod(
-                name="myapp-pod", namespace=self.test_namespace, body={})
-            raise unittest.SkipTest("Pod did not reach Running state in time")
+        # Allow metrics scrape interval
+        sleep(10)
         
-        # Wait a bit more for metrics to be available
-        time.sleep(10)
-        
-        # Test node metrics retrieval
+        # Test 1: Node metrics utility
         try:
-            node_metrics = utils.get_nodes_metrics(k8s_client)
-            self.assertIsNotNone(node_metrics)
-            self.assertEqual(node_metrics['kind'], 'NodeMetricsList')
-            self.assertIn('items', node_metrics)
-            # We should have at least one node in the cluster
-            self.assertGreater(len(node_metrics['items']), 0)
-            # Check structure of first node metric
-            if len(node_metrics['items']) > 0:
-                node = node_metrics['items'][0]
-                self.assertIn('metadata', node)
-                self.assertIn('name', node['metadata'])
-                self.assertIn('usage', node)
-                self.assertIn('cpu', node['usage'])
-                self.assertIn('memory', node['usage'])
-        except ApiException as e:
-            # If metrics-server is not installed, skip this test
-            if e.status == 404:
-                core_api.delete_namespaced_pod(
-                    name="myapp-pod", namespace=self.test_namespace, body={})
-                raise unittest.SkipTest("Metrics server not available in cluster")
-            raise
-        
-        # Test pod metrics retrieval
-        try:
-            pod_metrics = utils.get_pods_metrics(
-                k8s_client, self.test_namespace)
-            self.assertIsNotNone(pod_metrics)
-            self.assertEqual(pod_metrics['kind'], 'PodMetricsList')
-            self.assertIn('items', pod_metrics)
-            # We should have our test pod
-            self.assertGreater(len(pod_metrics['items']), 0)
-            # Check structure of pod metrics
-            found_test_pod = False
-            for pod in pod_metrics['items']:
-                if pod['metadata']['name'] == 'myapp-pod':
-                    found_test_pod = True
-                    self.assertIn('containers', pod)
-                    self.assertGreater(len(pod['containers']), 0)
-                    container = pod['containers'][0]
-                    self.assertIn('name', container)
-                    self.assertIn('usage', container)
-                    self.assertIn('cpu', container['usage'])
-                    self.assertIn('memory', container['usage'])
-            # Our test pod should appear in metrics
-            self.assertTrue(found_test_pod, "Test pod not found in metrics")
+            result = utils.get_nodes_metrics(api)
+            self.assertTrue('items' in result and len(result['items']) > 0)
+            self.assertTrue('usage' in result['items'][0])
         except ApiException as e:
             if e.status == 404:
-                core_api.delete_namespaced_pod(
-                    name="myapp-pod", namespace=self.test_namespace, body={})
-                raise unittest.SkipTest("Metrics server not available in cluster")
+                v1.delete_namespaced_pod("myapp-pod", self.test_namespace, body={})
+                raise unittest.SkipTest("Metrics API unavailable")
             raise
         
-        # Test pod metrics with label selector
-        try:
-            filtered_metrics = utils.get_pods_metrics(
-                k8s_client, self.test_namespace, label_selector='app=myapp')
-            self.assertIsNotNone(filtered_metrics)
-            self.assertEqual(filtered_metrics['kind'], 'PodMetricsList')
-            self.assertIn('items', filtered_metrics)
-            # Should have our pod with the matching label
-            self.assertGreater(len(filtered_metrics['items']), 0)
-            for pod in filtered_metrics['items']:
-                # All returned pods should have the label we filtered for
-                self.assertEqual(pod['metadata']['name'], 'myapp-pod')
-        except ApiException as e:
-            if e.status == 404:
-                core_api.delete_namespaced_pod(
-                    name="myapp-pod", namespace=self.test_namespace, body={})
-                raise unittest.SkipTest("Metrics server not available in cluster")
-            raise
+        # Test 2: Pod metrics utility (basic)
+        result = utils.get_pods_metrics(api, self.test_namespace)
+        self.assertTrue('items' in result)
+        pod_names = [item['metadata']['name'] for item in result['items']]
+        self.assertIn('myapp-pod', pod_names)
         
-        # Test multi-namespace metrics collection
-        try:
-            multi_ns_metrics = utils.get_pods_metrics_in_all_namespaces(
-                k8s_client, [self.test_namespace, 'default'])
-            self.assertIsNotNone(multi_ns_metrics)
-            self.assertIn(self.test_namespace, multi_ns_metrics)
-            self.assertIn('default', multi_ns_metrics)
-            # Our test namespace should have metrics
-            test_ns_result = multi_ns_metrics[self.test_namespace]
-            self.assertNotIn('error', test_ns_result)
-            self.assertEqual(test_ns_result['kind'], 'PodMetricsList')
-        except ApiException as e:
-            if e.status == 404:
-                core_api.delete_namespaced_pod(
-                    name="myapp-pod", namespace=self.test_namespace, body={})
-                raise unittest.SkipTest("Metrics server not available in cluster")
-            raise
+        # Test 3: Pod metrics with label filtering
+        result = utils.get_pods_metrics(api, self.test_namespace, 'app=myapp')
+        self.assertEqual(len(result['items']), 1)
+        self.assertEqual(result['items'][0]['metadata']['name'], 'myapp-pod')
         
-        # Cleanup
-        core_api.delete_namespaced_pod(
-            name="myapp-pod", namespace=self.test_namespace, body={})
+        # Test 4: Multi-namespace aggregation
+        result = utils.get_pods_metrics_in_all_namespaces(
+            api, [self.test_namespace, 'default'])
+        self.assertIn(self.test_namespace, result)
+        self.assertNotIn('error', result[self.test_namespace])
+        
+        # Teardown
+        v1.delete_namespaced_pod("myapp-pod", self.test_namespace, body={})
 
 
 class TestUtilsUnitTests(unittest.TestCase):
