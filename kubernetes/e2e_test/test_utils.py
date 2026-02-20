@@ -608,6 +608,72 @@ class TestUtils(unittest.TestCase):
         app_api.delete_namespaced_deployment(
             name="mock", namespace=self.test_namespace, body={})
 
+    def test_metrics_utilities_integration(self):
+        """
+        E2E validation of metrics utility functions.
+        Note: Requires metrics-server to be running in cluster.
+        """
+        from time import sleep
+        
+        api = client.api_client.ApiClient(configuration=self.config)
+        v1 = client.CoreV1Api(api)
+        
+        # Setup: deploy busybox pod
+        utils.create_from_yaml(
+            api, self.path_prefix + "core-pod.yaml",
+            namespace=self.test_namespace)
+        
+        # Wait for pod startup (simple polling)
+        for _ in range(30):
+            try:
+                p = v1.read_namespaced_pod("myapp-pod", self.test_namespace)
+                if p.status.phase == "Running":
+                    break
+            except:
+                pass
+            sleep(2)
+        else:
+            # Cleanup and skip if pod never started
+            try:
+                v1.delete_namespaced_pod("myapp-pod", self.test_namespace, body={})
+            except:
+                pass
+            raise unittest.SkipTest("Pod startup timeout")
+        
+        # Allow metrics scrape interval
+        sleep(10)
+        
+        # Test 1: Node metrics utility
+        try:
+            result = utils.get_nodes_metrics(api)
+            self.assertTrue('items' in result and len(result['items']) > 0)
+            self.assertTrue('usage' in result['items'][0])
+        except ApiException as e:
+            if e.status == 404:
+                v1.delete_namespaced_pod("myapp-pod", self.test_namespace, body={})
+                raise unittest.SkipTest("Metrics API unavailable")
+            raise
+        
+        # Test 2: Pod metrics utility (basic)
+        result = utils.get_pods_metrics(api, self.test_namespace)
+        self.assertTrue('items' in result)
+        pod_names = [item['metadata']['name'] for item in result['items']]
+        self.assertIn('myapp-pod', pod_names)
+        
+        # Test 3: Pod metrics with label filtering
+        result = utils.get_pods_metrics(api, self.test_namespace, 'app=myapp')
+        self.assertEqual(len(result['items']), 1)
+        self.assertEqual(result['items'][0]['metadata']['name'], 'myapp-pod')
+        
+        # Test 4: Multi-namespace aggregation
+        result = utils.get_pods_metrics_in_all_namespaces(
+            api, [self.test_namespace, 'default'])
+        self.assertIn(self.test_namespace, result)
+        self.assertNotIn('error', result[self.test_namespace])
+        
+        # Teardown
+        v1.delete_namespaced_pod("myapp-pod", self.test_namespace, body={})
+
 
 class TestUtilsUnitTests(unittest.TestCase):
 
