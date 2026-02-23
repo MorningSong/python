@@ -207,14 +207,14 @@ git diff-index --quiet --cached HEAD || git commit -am "update changelog"
 
 # Re-generate the client
 scripts/update-client.sh
-#edit comfiguration.py files
-scripts/insert_proxy_config.sh
 # Apply hotfixes
 rm -r kubernetes/test/
 git add .
 git commit -m "temporary generated commit"
 scripts/apply-hotfixes.sh
 git reset HEAD~2
+# Apply proxy config after hotfixes
+scripts/insert_proxy_config.sh
 
 # Custom object API is hosted in gen repo. Commit custom object API change
 # separately for easier review
