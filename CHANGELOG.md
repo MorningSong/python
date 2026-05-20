@@ -1,3 +1,14 @@
+# v36.0.0
+
+Kubernetes API Version: v1.36.1
+
+# v36.0.0b1
+
+Kubernetes API Version: v1.36.1
+
+### Deprecation
+- Support new exec v5 websocket subprotocol (#2486, @aojea)
+
 # v36.0.0a3
 
 Kubernetes API Version: v1.36.0
