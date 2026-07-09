@@ -132,7 +132,7 @@ newbranch="$(echo "automated-release-of-${CLIENT_VERSION}-${remote_branch}" | se
 newbranchuniq="${newbranch}-$(date +%s)"
 declare -r newbranchuniq
 echo "+++ Creating local branch ${newbranchuniq}"
-git checkout -b "${newbranchuniq}" "${remote_branch}"
+git checkout -b "${newbranchuniq}" "upstream/master"
 
 # Get Kubernetes API versions
 old_client_version=$(python3 "scripts/constants.py" CLIENT_VERSION)
@@ -143,7 +143,7 @@ echo "New Kubernetes API Version: $new_k8s_api_version"
 
 # If it's an actual release, pull master branch
 if [[ $CLIENT_VERSION != *"snapshot"* ]]; then
-  git pull -X theirs upstream master --no-edit
+  git pull -X theirs upstream release-"${CLIENT_VERSION%%.*}".0 --no-edit
 
   # Collect release notes from master branch
   if [[ $(git log ${remote_branch}..upstream/master | grep ^commit) ]]; then
