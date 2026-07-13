@@ -120,3 +120,14 @@ class TestConfigurationAuthSettings(unittest.TestCase):
         """No api_key entry yields an empty auth dict."""
         config = Configuration()
         self.assertEqual(config.auth_settings(), {})
+
+    def test_auth_settings_with_authorization_key_and_prefix(self):
+        """Legacy callers that split the token and prefix across
+        api_key['authorization'] and api_key_prefix['authorization'] (rather
+        than embedding "Bearer " in the token itself) must still get the
+        prefix applied. https://github.com/kubernetes-client/python/issues/2592
+        """
+        config = Configuration()
+        config.api_key['authorization'] = 'abc123'
+        config.api_key_prefix['authorization'] = 'Bearer'
+        self.assertEqual(self._bearer_value(config), 'Bearer abc123')

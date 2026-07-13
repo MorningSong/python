@@ -388,7 +388,8 @@ conf = client.Configuration(
                 await result
         key = self.api_key.get(identifier, self.api_key.get(alias) if alias is not None else None)
         if key:
-            prefix = self.api_key_prefix.get(identifier)
+            prefix = self.api_key_prefix.get(
+                identifier, self.api_key_prefix.get(alias) if alias is not None else None)
             if prefix:
                 return "%s %s" % (prefix, key)
             else:
