@@ -12,18 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import random
 import re
-import time
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, TypeVar
+from typing import Any, Callable, Optional
 
 
-T = TypeVar("T")
-
-
-# This module is a 1:1 Python implementation of the Kubernetes Go retry
-# algorithms used by client-go:
+# This module contains common pieces for 1:1 Python implementations of the
+# Kubernetes Go retry algorithms used by client-go:
 # - https://github.com/kubernetes/client-go/blob/master/util/retry/util.go
 # - https://github.com/kubernetes/apimachinery/blob/master/pkg/util/wait/
 #   backoff.go
@@ -142,10 +137,7 @@ def is_retry_after_response(error: Exception) -> bool:
     return retry_after_seconds(error) is not None
 
 
-def retry_after_seconds(
-    error: Exception,
-    now: Optional[Callable[[], float]] = None,
-) -> Optional[float]:
+def retry_after_seconds(error: Exception) -> Optional[float]:
     """Return the Retry-After delay in seconds, if ``error`` provides one.
 
     client-go accepts integer seconds. Invalid, missing, or negative values
@@ -165,96 +157,6 @@ def retry_after_seconds(
     if not re.match(r"^[0-9]+$", value):
         return None
     return float(int(value))
-
-
-def on_error(
-    backoff: Backoff,
-    retriable: Callable[[Exception], bool],
-    fn: Callable[[], T],
-    sleep_func: Callable[[float], None] = time.sleep,
-    random_func: Callable[[], float] = random.random,
-) -> T:
-    """Run ``fn`` and retry while ``retriable`` returns True.
-
-    This is a 1:1 implementation of
-    ``k8s.io/client-go/util/retry.OnError``.
-    """
-
-    steps = backoff.steps
-    duration = backoff.duration
-    last_error = None
-    while steps > 0:
-        try:
-            return fn()
-        except Exception as error:
-            if not retriable(error):
-                raise
-            last_error = error
-
-            if steps == 1:
-                break
-
-            delay, duration, steps = _delay(
-                steps, duration, backoff, random_func)
-            sleep_func(delay)
-
-    raise last_error
-
-
-def retry_on_conflict(
-    fn: Callable[[], T],
-    backoff: Backoff = DEFAULT_RETRY,
-    sleep_func: Callable[[float], None] = time.sleep,
-    random_func: Callable[[], float] = random.random,
-) -> T:
-    """Run ``fn`` and retry on HTTP 409 Conflict responses.
-
-    This is a 1:1 implementation of
-    ``k8s.io/client-go/util/retry.RetryOnConflict``. Callers should re-read the
-    object inside ``fn`` before each write attempt, so every retry uses the
-    latest resource version.
-    """
-
-    return on_error(backoff, is_conflict, fn, sleep_func, random_func)
-
-
-def on_retry_after_error(
-    backoff: Backoff,
-    retriable: Callable[[Exception], bool],
-    fn: Callable[[], T],
-    sleep_func: Callable[[float], None] = time.sleep,
-    random_func: Callable[[], float] = random.random,
-) -> T:
-    """Run ``fn`` with client-go REST Retry-After sleep semantics.
-
-    This is a 1:1 implementation of the wait selection in
-    ``k8s.io/client-go/rest.WithRetry``: if the retriable response carries a
-    valid ``Retry-After`` header, that delay is used; otherwise the supplied
-    backoff delay is used.
-    """
-
-    steps = backoff.steps
-    duration = backoff.duration
-    last_error = None
-    while steps > 0:
-        try:
-            return fn()
-        except Exception as error:
-            if not retriable(error):
-                raise
-            last_error = error
-
-            if steps == 1:
-                break
-
-            delay, duration, steps = _delay(
-                steps, duration, backoff, random_func)
-            retry_after = retry_after_seconds(error)
-            if retry_after is not None and retry_after > delay:
-                delay = retry_after
-            sleep_func(delay)
-
-    raise last_error
 
 
 def _delay(

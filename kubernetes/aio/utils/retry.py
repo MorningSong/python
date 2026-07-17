@@ -16,7 +16,7 @@ import asyncio
 import random
 from typing import Awaitable, Callable, TypeVar
 
-from .retry_base import (
+from ._retry_base import (
     Backoff,
     DEFAULT_BACKOFF,
     DEFAULT_RETRY,
@@ -25,18 +25,19 @@ from .retry_base import (
     is_conflict,
     is_retry_after_response,
     is_too_many_requests,
-    on_error,
-    on_retry_after_error,
     retry_after_backoff,
     retry_after_max_retries,
     retry_after_seconds,
-    retry_on_conflict,
 )
 
 
 T = TypeVar("T")
 
 
+# The retry helpers in this module are async 1:1 Python implementations of the
+# Kubernetes Go retry algorithms used by client-go:
+# - https://github.com/kubernetes/client-go/blob/master/util/retry/util.go
+# - https://github.com/kubernetes/client-go/blob/master/rest/with_retry.go
 async def async_on_error(
     backoff: Backoff,
     retriable: Callable[[Exception], bool],
