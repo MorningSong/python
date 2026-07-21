@@ -75,6 +75,7 @@ setup(
               'kubernetes.informer',
               'kubernetes.aio',
               'kubernetes.aio.config',
+              'kubernetes.aio.utils',
               'kubernetes.aio.client',
               'kubernetes.aio.client.api',
               'kubernetes.aio.client.models'
