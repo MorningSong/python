@@ -39,12 +39,18 @@ index 720bb81f..b2522c23 100644
          """Gets Auth Settings dict for api client.
 
          :return: The Auth Settings information dict.
-@@ -413,7 +416,7 @@ conf = client.Configuration(
+@@ -410,5 +413,5 @@ conf = client.Configuration(
+-        if 'BearerToken' in self.api_key:
++        if 'BearerToken' in self.api_key or 'authorization' in self.api_key:
+             auth['BearerToken'] = {
                  'type': 'api_key',
                  'in': 'header',
                  'key': 'authorization',
+@@ -415,5 +418,5 @@ conf = client.Configuration(
+                 'key': 'authorization',
 -                'value': self.get_api_key_with_prefix(
 +                'value': await self.get_api_key_with_prefix(
-                     'BearerToken',
+-                    'BearerToken',
++                    'BearerToken', alias='authorization',
                  ),
              }

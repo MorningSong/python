@@ -2,13 +2,46 @@
 
 
 import unittest
+from unittest import mock
+import weakref
 
 import kubernetes
+from kubernetes.aio.client.configuration import Configuration as AsyncConfiguration
 from kubernetes.client.configuration import Configuration
 import urllib3
 
 
 class TestApiClient(unittest.TestCase):
+    def test_context_manager_closes_threadpool(self):
+        with kubernetes.client.ApiClient() as client:
+            pool = weakref.ref(client.pool)
+
+        self.assertIsNone(client._pool)
+        self.assertIsNone(pool())
+
+    @mock.patch('kubernetes.client.api_client.atexit.register')
+    def test_atexit_closes_threadpool(self, register):
+        client = kubernetes.client.ApiClient()
+        client.pool
+
+        register.assert_called_once_with(client.close)
+        register.call_args.args[0]()
+
+        self.assertIsNone(client._pool)
+
+    def test_deserialize_dict_syntax_compatibility(self):
+        client = kubernetes.client.ApiClient()
+
+        for response_type, expected in (
+            ('Dict[str, str]', {'key': 'value'}),
+            ('Dict[str, Dict[str, str]]', {'outer': {'key': 'value'}}),
+        ):
+            with self.subTest(response_type=response_type):
+                self.assertEqual(
+                    client._ApiClient__deserialize(expected, response_type),
+                    expected,
+                )
+
     def test_rest_proxycare(self):
 
         pool = { 'proxy': urllib3.ProxyManager, 'direct': urllib3.PoolManager }
@@ -86,3 +119,25 @@ class TestConfigurationAuthSettings(unittest.TestCase):
         config.api_key['authorization'] = 'abc123'
         config.api_key_prefix['authorization'] = 'Bearer'
         self.assertEqual(self._bearer_value(config), 'Bearer abc123')
+
+
+class TestAsyncConfigurationAuthSettings(unittest.IsolatedAsyncioTestCase):
+    async def test_auth_settings_with_authorization_key_and_prefix(self):
+        config = AsyncConfiguration()
+        config.api_key['authorization'] = 'abc123'
+        config.api_key_prefix['authorization'] = 'Bearer'
+
+        self.assertEqual(
+            (await config.auth_settings())['BearerToken']['value'],
+            'Bearer abc123',
+        )
+
+    async def test_auth_settings_bearer_token_takes_precedence(self):
+        config = AsyncConfiguration()
+        config.api_key['BearerToken'] = 'Bearer new'
+        config.api_key['authorization'] = 'Bearer old'
+
+        self.assertEqual(
+            (await config.auth_settings())['BearerToken']['value'],
+            'Bearer new',
+        )
