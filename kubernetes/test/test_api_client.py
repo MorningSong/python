@@ -1,58 +1,46 @@
 # coding: utf-8
 
 
-import atexit
-import weakref
 import unittest
+from unittest import mock
+import weakref
 
 import kubernetes
+from kubernetes.aio.client.configuration import Configuration as AsyncConfiguration
 from kubernetes.client.configuration import Configuration
 import urllib3
 
 
 class TestApiClient(unittest.TestCase):
-
     def test_context_manager_closes_threadpool(self):
         with kubernetes.client.ApiClient() as client:
-            self.assertIsNotNone(client.pool)
-            pool_ref = weakref.ref(client._pool)
-            self.assertIsNotNone(pool_ref())
-        self.assertIsNone(pool_ref())
+            pool = weakref.ref(client.pool)
 
-    def test_atexit_closes_threadpool(self):
+        self.assertIsNone(client._pool)
+        self.assertIsNone(pool())
+
+    @mock.patch('kubernetes.client.api_client.atexit.register')
+    def test_atexit_closes_threadpool(self, register):
         client = kubernetes.client.ApiClient()
-        self.assertIsNotNone(client.pool)
-        self.assertIsNotNone(client._pool)
-        atexit._run_exitfuncs()
+        client.pool
+
+        register.assert_called_once_with(client.close)
+        register.call_args.args[0]()
+
         self.assertIsNone(client._pool)
 
     def test_deserialize_dict_syntax_compatibility(self):
-        """Test ApiClient.__deserialize supports both
-        dict(str, str) and dict[str, str] syntax"""
         client = kubernetes.client.ApiClient()
 
-        # Test data
-        test_data = {
-            'key1': 'value1',
-            'key2': 'value2'
-        }
-
-        # Test legacy syntax: dict(str, str)
-        # legacy syntax is no longer supported after upgrading openapi generator to v6.6.0
-        #result_legacy = client._ApiClient__deserialize(test_data, 'dict(str, str)')
-        #self.assertEqual(result_legacy, test_data)
-
-        # Test modern syntax: dict[str, str]
-        result_modern = client._ApiClient__deserialize(test_data, 'dict[str, str]')
-        self.assertEqual(result_modern, test_data)
-
-        # Test nested dict: dict[str, dict[str, str]]
-        nested_data = {
-            'outer1': {'inner1': 'value1', 'inner2': 'value2'},
-            'outer2': {'inner3': 'value3'}
-        }
-        result_nested = client._ApiClient__deserialize(nested_data, 'dict[str, dict[str, str]]')
-        self.assertEqual(result_nested, nested_data)
+        for response_type, expected in (
+            ('Dict[str, str]', {'key': 'value'}),
+            ('Dict[str, Dict[str, str]]', {'outer': {'key': 'value'}}),
+        ):
+            with self.subTest(response_type=response_type):
+                self.assertEqual(
+                    client._ApiClient__deserialize(expected, response_type),
+                    expected,
+                )
 
     def test_rest_proxycare(self):
 
@@ -67,7 +55,7 @@ class TestApiClient(unittest.TestCase):
              ( 'http://kube.others.com:1234/','http://proxy.local:8080/',  '*',                            pool['direct']),
         ]:
             # setup input
-            config = Configuration()
+            config = Configuration(proxy='', no_proxy='')
             setattr(config, 'host', dst)
             if proxy is not None:
                 setattr(config, 'proxy', proxy)
@@ -131,3 +119,25 @@ class TestConfigurationAuthSettings(unittest.TestCase):
         config.api_key['authorization'] = 'abc123'
         config.api_key_prefix['authorization'] = 'Bearer'
         self.assertEqual(self._bearer_value(config), 'Bearer abc123')
+
+
+class TestAsyncConfigurationAuthSettings(unittest.IsolatedAsyncioTestCase):
+    async def test_auth_settings_with_authorization_key_and_prefix(self):
+        config = AsyncConfiguration()
+        config.api_key['authorization'] = 'abc123'
+        config.api_key_prefix['authorization'] = 'Bearer'
+
+        self.assertEqual(
+            (await config.auth_settings())['BearerToken']['value'],
+            'Bearer abc123',
+        )
+
+    async def test_auth_settings_bearer_token_takes_precedence(self):
+        config = AsyncConfiguration()
+        config.api_key['BearerToken'] = 'Bearer new'
+        config.api_key['authorization'] = 'Bearer old'
+
+        self.assertEqual(
+            (await config.auth_settings())['BearerToken']['value'],
+            'Bearer new',
+        )

@@ -1,3 +1,37 @@
+# Breaking Change from upgrading OpenAPI Generator to v7.24.0
+
+The synchronous client now uses the modern Python generator instead of
+`python-legacy`. Existing endpoint names, model names, and wire aliases
+are preserved, but applications may need the following updates:
+
+- Synchronous runtime dependencies now require `urllib3>=2.6.3,<3`,
+  `pydantic>=2.11`, `lazy-imports>=1,<2`,
+  `typing-extensions>=4.7.1`, and `python-dateutil>=2.8.2`. Python 3.10
+  remains the minimum supported version. Async generation is unchanged.
+- Models and API-call arguments now use Pydantic validation. Invalid,
+  unknown, or previously coerced values can raise
+  `pydantic.ValidationError` before a request is sent; models are
+  keyword-only, reject unknown fields during construction, and validate
+  assignments. The model `local_vars_configuration` argument and
+  Configuration's `discard_unknown_keys` and
+  `disabled_client_side_validations` arguments are removed.
+  `client_side_validation=False` no longer disables generated
+  validation.
+- Low-level synchronous transport interfaces changed. Direct callers of
+  `ApiClient.request`, `ApiClient.call_api`, `ApiClient.deserialize`, or
+  the `RESTClientObject` HTTP-verb helpers must migrate to the modern
+  request/response interface. `ApiException.body` is now decoded text
+  instead of bytes.
+- `CoreV1Api.delete_namespace` now returns a decoded dictionary rather
+  than `V1Status`, since a successful deletion can return either a
+  terminating Namespace or a Status.
+
+See [kubernetes-client/python#2631][python-pr] and
+[kubernetes-client/gen#305][gen-pr].
+
+[python-pr]: https://github.com/kubernetes-client/python/pull/2631
+[gen-pr]: https://github.com/kubernetes-client/gen/pull/305
+
 # v36.0.3
 
 Kubernetes API Version: v1.36.2

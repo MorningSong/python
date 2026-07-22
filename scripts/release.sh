@@ -211,15 +211,6 @@ scripts/update-client.sh
 # Re-generate the asyncio client
 scripts/update-client-asyncio.sh
 
-# Apply hotfixes
-rm -r kubernetes/test/
-git add .
-git commit -m "temporary generated commit"
-scripts/apply-hotfixes.sh
-git reset HEAD~2
-# Apply proxy config after hotfixes
-scripts/insert_proxy_config.sh
-
 # Custom object API is hosted in gen repo. Commit custom object API change
 # separately for easier review
 if [[ -n "$(git diff kubernetes/client/api/custom_objects_api.py)" ]]; then

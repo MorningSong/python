@@ -22,7 +22,7 @@ import socket
 import ssl
 import threading
 import time
-from urllib.parse import urlencode, urlparse, urlunparse
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 from io import StringIO, BytesIO
 from websocket import WebSocket, ABNF, enableTrace, WebSocketConnectionClosedException
 from base64 import urlsafe_b64decode
@@ -603,6 +603,8 @@ def portforward_call(configuration, _method, url, **kwargs):
     parameters of apiClient.request method."""
 
     query_params = kwargs.get("query_params")
+    if query_params is None:
+        query_params = parse_qsl(urlparse(url).query, keep_blank_values=True)
 
     ports = []
     for param, value in query_params:

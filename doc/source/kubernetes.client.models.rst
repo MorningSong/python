@@ -206,6 +206,7 @@ Submodules
    kubernetes.client.models.v1_group_resource
    kubernetes.client.models.v1_group_subject
    kubernetes.client.models.v1_group_version_for_discovery
+   kubernetes.client.models.v1_group_version_kind
    kubernetes.client.models.v1_grpc_action
    kubernetes.client.models.v1_horizontal_pod_autoscaler
    kubernetes.client.models.v1_horizontal_pod_autoscaler_list

@@ -111,7 +111,7 @@ class WSClientTest(unittest.TestCase):
                 ( 'http://proxy.example.com:8080/', 'user:pass', 'localhost,.local,.example.com',  'proxy.example.com', 8080, ('user','pass'), ['localhost','.local','.example.com']),
                 ]:
             #  input setup
-            cfg = Configuration()
+            cfg = Configuration(proxy='', no_proxy='')
             if proxy:
                 cfg.proxy = proxy
             if idpass:
