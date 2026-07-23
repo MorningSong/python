@@ -38,7 +38,7 @@ T = TypeVar("T")
 # Kubernetes Go retry algorithms used by client-go:
 # - https://github.com/kubernetes/client-go/blob/master/util/retry/util.go
 # - https://github.com/kubernetes/client-go/blob/master/rest/with_retry.go
-async def async_on_error(
+async def on_error(
     backoff: Backoff,
     retriable: Callable[[Exception], bool],
     fn: Callable[[], Awaitable[T]],
@@ -68,7 +68,7 @@ async def async_on_error(
     raise last_error
 
 
-async def async_retry_on_conflict(
+async def retry_on_conflict(
     fn: Callable[[], Awaitable[T]],
     backoff: Backoff = DEFAULT_RETRY,
     sleep_func: Callable[[float], Awaitable[None]] = asyncio.sleep,
@@ -76,11 +76,11 @@ async def async_retry_on_conflict(
 ) -> T:
     """Async 1:1 implementation of client-go ``retry.RetryOnConflict``."""
 
-    return await async_on_error(
+    return await on_error(
         backoff, is_conflict, fn, sleep_func, random_func)
 
 
-async def async_on_retry_after_error(
+async def on_retry_after_error(
     backoff: Backoff,
     retriable: Callable[[Exception], bool],
     fn: Callable[[], Awaitable[T]],

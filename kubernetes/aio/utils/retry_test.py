@@ -17,11 +17,11 @@ import unittest
 from kubernetes.aio.utils.retry import (
     Backoff,
     DEFAULT_RETRY,
-    async_on_error,
-    async_on_retry_after_error,
-    async_retry_on_conflict,
     is_too_many_requests,
+    on_error,
+    on_retry_after_error,
     retry_after_seconds,
+    retry_on_conflict,
 )
 
 
@@ -46,7 +46,7 @@ class AioRetryTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(retry_after_seconds(error), 7.0)
 
-    async def test_async_on_error_retries_retriable_errors(self):
+    async def test_on_error_retries_retriable_errors(self):
         attempts = []
         sleeps = []
 
@@ -59,7 +59,7 @@ class AioRetryTest(unittest.IsolatedAsyncioTestCase):
         async def sleep(delay):
             sleeps.append(delay)
 
-        result = await async_on_error(
+        result = await on_error(
             Backoff(steps=4, duration=1.0, factor=2.0),
             lambda e: getattr(e, "status", None) == 500,
             fn,
@@ -71,7 +71,7 @@ class AioRetryTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(attempts), 3)
         self.assertEqual(sleeps, [1.0, 2.0])
 
-    async def test_async_on_retry_after_error_honors_retry_after_for_429(self):
+    async def test_on_retry_after_error_honors_retry_after_for_429(self):
         attempts = []
         sleeps = []
 
@@ -84,7 +84,7 @@ class AioRetryTest(unittest.IsolatedAsyncioTestCase):
         async def sleep(delay):
             sleeps.append(delay)
 
-        result = await async_on_retry_after_error(
+        result = await on_retry_after_error(
             Backoff(steps=3, duration=1.0, factor=2.0),
             is_too_many_requests,
             fn,
@@ -95,7 +95,7 @@ class AioRetryTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, "ok")
         self.assertEqual(sleeps, [3.0])
 
-    async def test_async_retry_on_conflict_retries(self):
+    async def test_retry_on_conflict_retries(self):
         attempts = []
         sleeps = []
 
@@ -108,7 +108,7 @@ class AioRetryTest(unittest.IsolatedAsyncioTestCase):
         async def sleep(delay):
             sleeps.append(delay)
 
-        result = await async_retry_on_conflict(
+        result = await retry_on_conflict(
             fn,
             backoff=Backoff(steps=3, duration=1.0, factor=1.0),
             sleep_func=sleep,
